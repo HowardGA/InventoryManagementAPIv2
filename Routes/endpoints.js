@@ -1,9 +1,9 @@
-import express from 'express';
-import bcrypt from 'bcrypt';
+const express = require('express');
+const bcrypt = require('bcrypt');
 
 const router = express.Router();
 
-export default (db) => {
+module.exports = (db) => {
     // Define your routes here and use the `db` connection for database operations
     
     router.get('/getArtByID/:id', async (req, res) => {
