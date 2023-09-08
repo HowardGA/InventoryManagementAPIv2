@@ -60,7 +60,9 @@ module.exports = (db) => {
                     return res.status(401).json({
                         status: 'FAIL',
                         message: 'Invalid email or password',
-                        data: null
+                        data: null,
+                        pwd:pwd,
+                        real:storedHashedPassword
                     });
                 }
             });
