@@ -1,8 +1,9 @@
-const express = require('express');
-const router = express.Router();
-const bcrypt = require('bcrypt');
+import express from 'express';
+import bcrypt from 'bcrypt';
 
-module.exports = (db) => {
+const router = express.Router();
+
+export default (db) => {
     // Define your routes here and use the `db` connection for database operations
     
     router.get('/getArtByID/:id', async (req, res) => {
@@ -73,9 +74,8 @@ module.exports = (db) => {
         }
     });
     
-      
-      // /register route
-      router.post('/register', async (req, res) => {
+    // /register route
+    router.post('/register', async (req, res) => {
         try {
           const { name, lastname, email, password } = req.body;
           // Hash the password
@@ -91,9 +91,7 @@ module.exports = (db) => {
           console.error(error);
           res.status(500).json({ error: 'Internal Server Error' });
         }
-      });
-
+    });
 
     return router;
 };
-
