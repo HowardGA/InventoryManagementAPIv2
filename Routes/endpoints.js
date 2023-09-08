@@ -82,7 +82,7 @@ module.exports = (db) => {
           const hashedPassword = await bcrypt.hash(password, 10);
           // Save to the DB
           const [result] = await db.query(
-            'INSERT INTO Usuario (Nombre, ApePat, Correo, Passwd) VALUES (?, ?, ?, ?)',
+            'INSERT INTO Usuario (Nombre, ApePat, Correo, Passwd,Rol) VALUES (?, ?, ?, ?, 2)',
             [name, lastname, email, hashedPassword]
           );
           // Return a success message
