@@ -16,7 +16,7 @@ app.use(express.json());
 app.use(cors(corsOption));
 
 // Routes
-import Router from './Routes/endpoints.js';
+import Router from './Routes/endpoints';
 const router = Router(db);
 
 app.use('/api', router);
