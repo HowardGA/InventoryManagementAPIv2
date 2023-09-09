@@ -30,7 +30,7 @@ module.exports = (db) => {
     //get the pwd, then decrypt it and send it to the client like that
     router.post('/login', async (req, res) => {
         try {
-            const { email, pwd } = req.body;
+            const { email, password } = req.body;
             const [row] = await db.query('SELECT Nombre, ApePat, Correo, Passwd FROM Usuario WHERE Correo = ?', [email]);
     
             if (!row[0]) {
@@ -43,7 +43,7 @@ module.exports = (db) => {
     
             const storedHashedPassword = row[0].Passwd;
     
-            bcrypt.compare(pwd, storedHashedPassword, (err, result) => {
+            bcrypt.compare(password, storedHashedPassword, (err, result) => {
                 if (result === true) {
                     const userData = {
                         name: row[0].Nombre,
