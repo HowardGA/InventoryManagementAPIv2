@@ -42,9 +42,8 @@ module.exports = (db) => {
             }
     
             const storedHashedPassword = row[0].Passwd;
-            const pwdC = await bcrypt.hash(pwd, 10);
     
-            bcrypt.compare(pwdC, storedHashedPassword, (err, result) => {
+            bcrypt.compare(pwd, storedHashedPassword, (err, result) => {
                 if (result === true) {
                     const userData = {
                         name: row[0].Nombre,
