@@ -42,8 +42,9 @@ module.exports = (db) => {
             }
     
             const storedHashedPassword = row[0].Passwd;
+            const pwdC = await bcrypt.hash(pwd, 10);
     
-            bcrypt.compare(pwd, storedHashedPassword, (err, result) => {
+            bcrypt.compare(pwdC, storedHashedPassword, (err, result) => {
                 if (result === true) {
                     const userData = {
                         name: row[0].Nombre,
@@ -61,8 +62,6 @@ module.exports = (db) => {
                         status: 'FAIL',
                         message: 'Invalid email or password',
                         data: null,
-                        pwd:pwd,
-                        real:storedHashedPassword
                     });
                 }
             });
