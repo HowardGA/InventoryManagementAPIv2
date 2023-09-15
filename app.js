@@ -3,7 +3,7 @@ const cors = require('cors');
 const db = require('./database/connection');
 
 // Port
-const port = 5000;
+const port = 8080;
 
 const corsOption = {
     origin: '*',
