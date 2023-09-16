@@ -22,7 +22,32 @@ module.exports = (db) => {
         try {
             const id = req.params.id;
             const [row] = await db.query('SELECT * FROM Articulo WHERE Num_Referencia = ?', [id]);
-            res.json(row[0]);
+            const UPC = row[0].Num_Referencia;
+            //take the location from the other table
+            const [location] = await db.query(`
+            SELECT ubi.Lugar
+            FROM Articulo as art
+            inner JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
+            inner join Ubicacion as ubi on AU.Ubicacion = ubi.Numero
+            WHERE art.Num_Referencia = ?`,[UPC]);
+//add it to the main data
+            row[0].locacion = location[0].Lugar; 
+
+            if(row.length === 0){
+                
+                return res.status(404).json({
+                    status: 'FAIL',
+                    message: 'Articulo Inexistente',
+                    data: null
+                });
+            }else{
+                
+                    return res.status(200).json({
+                        status: 'SUCCESS',
+                        message: 'Articulo Encontrado',
+                        data: row[0],
+                    });
+            }
         } catch (error) {
             console.error(error);
             res.status(500).json({ error: 'Internal Server Error' });
@@ -171,7 +196,7 @@ module.exports = (db) => {
             }
         });
 
-        //get only the UPC
+        //get only the UPC //MAke them to get only the last 6 or so
         router.get('/getAllArtUPC', async (req, res) => {
             try {
               const [rows] = await db.query('SELECT Num_Referencia FROM Articulo');
@@ -182,8 +207,6 @@ module.exports = (db) => {
               res.status(500).json({ error: 'Internal Server Error' });
             }
           });
-
-
 
     return router;
 };
