@@ -54,9 +54,26 @@ module.exports = (db) => {
         }
     });
 
+    router.get('/idCheck/:id', async (req,res) => {
+        try{
+            const id = req.params.id; 
+            const [row] = await db.query('select Num_Referencia from Articulo where Num_Referencia = ?',[id]);
+            let check;
+            if (typeof row[0].Num_Referencia === 'string'){
+                return res.status(200).json({
+                    id:1
+                });
+            }
+        }catch (error) {
+            console.error(error);
+            res.status(200).json({ id:0 });
+        }
+    });
+
     router.get('/getAllArt', async (req, res) => {
         try {
             const [row] = await db.query('SELECT * FROM Articulo');
+
             res.json(row[0]);
         } catch (error) {
             console.error(error);
@@ -207,6 +224,24 @@ module.exports = (db) => {
               res.status(500).json({ error: 'Internal Server Error' });
             }
           });
+
+          //endpoint to add a new location to the list
+          router.post('/setLocation', async (req, res) => {
+            try {
+              const {location} = req.body;
+
+              // Save to the DB
+              const [result] = await db.query(
+                "INSERT INTO Ubicacion (Lugar) VALUES (?)",
+                [location]
+              );
+              // Return a success message
+              res.status(201).json({ message: 'Ubicación Añadida' });
+            } catch (error) {
+              console.error(error);
+              res.status(500).json({ error: 'Internal Server Error' });
+            }
+        });
 
     return router;
 };
