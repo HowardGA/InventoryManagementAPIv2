@@ -172,10 +172,9 @@ module.exports = (db) => {
         // ADD new item
         router.post('/addItem', async (req, res) => {
             try{
-                const {codigo,nombre,modelo,color,descripcion,marca,ubicacion} = req.body;
+                const {codigo,nombre,modelo,color,descripcion,marca,ubicacion,email} = req.body;
 
                 const currentTimeStamp = getCurrentDateTime();
-                console.log(ubicacion);
                 
                 const [brandResult] = await db.query(
                     'SELECT Numero FROM Marca WHERE Nombre = ?',
@@ -185,12 +184,14 @@ module.exports = (db) => {
                     'SELECT Numero FROM Ubicacion WHERE Lugar = ?',
                     [ubicacion]
                   );
-
+                  const [user] = await db.query(
+                    'SELECT Numero FROM Usuario WHERE Correo = ?',
+                    [email]
+                  );
+                  console.log(user[0].Numero);
 
                     const brand = brandResult && brandResult[0] ? brandResult[0].Numero : null;
                     const location = locationResult && locationResult[0] ? locationResult[0].Numero : null;
-                    console.log("Location query result: "+location); 
-
 
                 const [result] = await db.query(
                     'INSERT INTO Articulo (Num_Referencia,Nombre,Modelo,Color,Descripcion,FechaCreacion,Marca) VALUES (?,?,?,?,?,?,?)',
@@ -200,6 +201,10 @@ module.exports = (db) => {
                 const [result2] = await db.query(
                     'INSERT INTO Art_Ubi (Ubicacion,Num_Referencia,FechaEntrada,FechaSalida,Comentario) VALUES (?,?,?,NULL,"Artiuclo nuevo, recien añadido")',
                         [location,codigo,currentTimeStamp]
+                );
+                const [result3] = await db.query(
+                    'INSERT INTO Usr_Art (Usuario,Num_Referencia) VALUES (?,?)',
+                        [user[0].Numero,codigo]
                 );
                   // Return a success message
                   return res.status(200).json({
@@ -237,6 +242,24 @@ module.exports = (db) => {
               );
               // Return a success message
               res.status(201).json({ message: 'Ubicación Añadida' });
+            } catch (error) {
+              console.error(error);
+              res.status(500).json({ error: 'Internal Server Error' });
+            }
+        });
+
+          //endpoint to add a new Brand to the list
+          router.post('/setBrand', async (req, res) => {
+            try {
+              const {brand} = req.body;
+
+              // Save to the DB
+              const [result] = await db.query(
+                "INSERT INTO Marca (Nombre) VALUES (?)",
+                [brand]
+              );
+              // Return a success message
+              res.status(201).json({ message: 'Marca Añadida' });
             } catch (error) {
               console.error(error);
               res.status(500).json({ error: 'Internal Server Error' });
