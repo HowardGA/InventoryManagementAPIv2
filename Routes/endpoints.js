@@ -30,8 +30,32 @@ module.exports = (db) => {
             inner JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
             inner join Ubicacion as ubi on AU.Ubicacion = ubi.Numero
             WHERE art.Num_Referencia = ?`,[UPC]);
+            //get the name of the user who inserted the item
+            const [user] = await db.query(`
+            SELECT usr.Nombre,usr.ApePat,usr.Correo
+            FROM Articulo as art
+            INNER JOIN Usr_Art as ua on art.Num_Referencia = ua.Num_Referencia
+            INNER JOIN Usuario as usr on ua.Usuario = usr.Numero
+            WHERE art.Num_Referencia = ?`,[UPC]);
+            //make the user a whole string
+            const userData = user[0];
+            const fullName = `${userData.Nombre} ${userData.ApePat}`;
+
+            // Get the state of the item
+            const [status] = await db.query(`
+            SELECT ea.Estado,ae.Comentario
+            FROM Articulo as art
+            INNER JOIN Art_Est as ae ON art.Num_Referencia = ae.Num_Referencia
+            INNER JOIN Estatus_Articulo as ea on ae.Estatus = ea.Numero
+            WHERE art.Num_Referencia = ?`,[UPC]);
+            //make the user a whole string
+            const statusData = status[0];
+            console.log("This is the status: "+statusData)
+            const fullStatus = `${statusData.Estado}, ${statusData.Comentario}`;
 //add it to the main data
             row[0].locacion = location[0].Lugar; 
+            row[0].usuario = fullName;
+            row[0].estado = fullStatus;
 
             if(row.length === 0){
                 
@@ -140,7 +164,7 @@ module.exports = (db) => {
             [name, lastname, email, hashedPassword]
           );
           // Return a success message
-          res.status(201).json({ message: 'User registered successfully' });
+          res.status(201).json({ message: 'User registered successfully', status:'SUCCESS'});
         } catch (error) {
           console.error(error);
           res.status(500).json({ error: 'Internal Server Error' });
@@ -266,5 +290,50 @@ module.exports = (db) => {
             }
         });
 
+        router.put('/updItem', async (req, res) => {
+            try {
+              const currentTimeStamp = getCurrentDateTime();
+              const { UPC, nombre, descripcion, ubicacion, comentario } = req.body;
+          
+              // Save to the DB
+              const [result] = await db.query(
+                `UPDATE Articulo
+                 SET Nombre = ?, Descripcion = ?
+                 WHERE Num_Referencia = ?`,
+                [nombre, descripcion, UPC]
+              );
+          
+              const [locationNum] = await db.query(
+                'SELECT Numero FROM Ubicacion WHERE Lugar = ?',
+                [ubicacion]
+              );
+                    
+              // Check if a row with the same Num_Referencia and NULL FechaSalida exists
+              const [existingRow] = await db.query(
+                'SELECT * FROM Art_Ubi WHERE Num_Referencia = ? AND FechaSalida IS NULL',
+                [UPC]
+              );
+          
+              // If an existing row is found, update FechaSalida
+              if (existingRow.length > 0) {
+                await db.query(
+                  'UPDATE Art_Ubi SET FechaSalida = ? WHERE Num_Referencia = ? AND FechaSalida IS NULL',
+                  [currentTimeStamp, UPC]
+                );
+              } 
+                // Insert a new row
+                await db.query(
+                  'INSERT INTO Art_Ubi (Ubicacion, Num_Referencia, FechaEntrada, Comentario) VALUES (?, ?, ?, ?)',
+                  [locationNum[0].Numero, UPC, currentTimeStamp, comentario]
+                );
+          
+              // Return a success message
+              res.status(201).json({ message: 'Campos Actualizados', status: 'SUCCESS' });
+            } catch (error) {
+              console.error(error);
+              res.status(500).json({ error: 'Internal Server Error' });
+            }
+          });
+          
     return router;
 };
