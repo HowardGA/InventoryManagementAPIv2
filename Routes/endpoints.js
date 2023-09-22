@@ -293,15 +293,8 @@ module.exports = (db) => {
         router.put('/updItem', async (req, res) => {
             try {
               const currentTimeStamp = getCurrentDateTime();
-              const { UPC, nombre, descripcion, ubicacion, comentario } = req.body;
+              const { UPC, ubicacion, comentario,reporte } = req.body;
           
-              // Save to the DB
-              const [result] = await db.query(
-                `UPDATE Articulo
-                 SET Nombre = ?, Descripcion = ?
-                 WHERE Num_Referencia = ?`,
-                [nombre, descripcion, UPC]
-              );
           
               const [locationNum] = await db.query(
                 'SELECT Numero FROM Ubicacion WHERE Lugar = ?',
@@ -314,6 +307,7 @@ module.exports = (db) => {
                 [UPC]
               );
           
+
               // If an existing row is found, update FechaSalida
               if (existingRow.length > 0) {
                 await db.query(
@@ -326,6 +320,11 @@ module.exports = (db) => {
                   'INSERT INTO Art_Ubi (Ubicacion, Num_Referencia, FechaEntrada, Comentario) VALUES (?, ?, ?, ?)',
                   [locationNum[0].Numero, UPC, currentTimeStamp, comentario]
                 );
+
+                await db.query(
+                  'UPDATE Reporte SET FechaAprobacion = ?, Estatus = ? WHERE Numero = ?',
+                  [currentTimeStamp,2,reporte]
+                );
           
               // Return a success message
               res.status(201).json({ message: 'Campos Actualizados', status: 'SUCCESS' });
@@ -334,6 +333,86 @@ module.exports = (db) => {
               res.status(500).json({ error: 'Internal Server Error' });
             }
           });
+
+          //Reports endpoint, here is where you add a new report
+          router.post('/addReport', async (req, res) => {
+            try {
+              const currentTimeStamp = getCurrentDateTime();
+              const { UPC, ubicacion, comentario,accion,usuario} = req.body;
+          
+              const [user] = await db.query(
+                'SELECT Numero FROM Usuario WHERE Correo = ?',
+                [usuario]
+              );
+
+              const [locationNum] = await db.query(
+                'SELECT Numero FROM Ubicacion WHERE Lugar = ?',
+                [ubicacion]
+              );
+
+              const report = await db.query(
+                `INSERT INTO Reporte (Accion,FechaCreacion,Estatus,Usuario,Articulo,Ubicacion,Comentario)
+                  VALUES (?,?,1,?,?,?,?)`,[accion,currentTimeStamp,user[0].Numero,UPC,locationNum[0].Numero,comentario]
+              )
+          
+              // Return a success message
+              res.status(201).json({ message: 'Reporte Realizado', status: 'SUCCESS' });
+            } catch (error) {
+              console.error(error);
+              res.status(500).json({ error: 'Internal Server Error' });
+            }
+          });
+
+          router.get('/getReports', async (req,res) => {
+            try {
+              const [Reports] = await db.query(`
+              SELECT Numero, Accion, FechaCreacion, Usuario, Articulo, Ubicacion, Comentario FROM Reporte WHERE Estatus = 1;
+              `,[]);
+              res.json(Reports);
+            } catch (error) {
+              console.error(error);
+              res.status(500).json({ error: 'Internal Server Error' });
+            }
+          });
+
+          router.get('/getReportById/:id', async (req, res) => {
+            try {
+              const id = req.params.id;
+
+              const [Report] = await db.query(`
+              SELECT Accion, FechaCreacion,FechaAprobacion, Estatus, Usuario, Articulo, Ubicacion, Comentario FROM Reporte WHERE Numero = ?
+              `,[id]);
+
+              const status = await db.query(`
+              SELECT Estado FROM Estatus_Reporte WHERE Numero = ?
+            `,[Report[0].Estatus]);
+
+              const User = await db.query(`
+              SELECT Nombre,ApePat FROM Usuario WHERE Numero = ?
+            `,[Report[0].Usuario]);
+            const fullName = `${User[0][0].Nombre} ${User[0][0].ApePat}`;
+
+              const location = await db.query(`
+                SELECT Lugar FROM Ubicacion WHERE Numero = ?
+              `,[Report[0].Ubicacion]);
+
+              const fullReport = {
+                "Accion": Report[0].Accion,
+                "FechaCreacion": Report[0].FechaCreacion,
+                "FechaAprobacion": Report[0].FechaAprobacion,
+                "Estatus": status[0][0].Estado,
+                "Usuario": fullName,
+                "Articulo": Report[0].Articulo,
+                "Ubicacion": location[0][0].Lugar,
+                "Comentario": Report[0].Comentario    
+                        }
+              res.json(fullReport);
+    
+            } catch (error) {
+                console.error(error);
+                res.status(500).json({ error: 'Internal Server Error' });
+            }
+        });
           
     return router;
 };
