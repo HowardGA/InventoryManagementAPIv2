@@ -29,7 +29,7 @@ module.exports = (db) => {
             FROM Articulo as art
             inner JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
             inner join Ubicacion as ubi on AU.Ubicacion = ubi.Numero
-            WHERE art.Num_Referencia = ?`,[UPC]);
+            WHERE art.Num_Referencia = ? and AU.FechaSalida IS NULL`,[UPC]);
             //get the name of the user who inserted the item
             const [user] = await db.query(`
             SELECT usr.Nombre,usr.ApePat,usr.Correo
@@ -413,6 +413,25 @@ module.exports = (db) => {
                 res.status(500).json({ error: 'Internal Server Error' });
             }
         });
+
+        router.get(('/locationHistory/:id'), async (req,res) => {
+          try{
+            const id = req.params.id;
+
+            const [history] = await db.query(`
+            SELECT ubi.Lugar, au.FechaEntrada, au.FechaSalida, au.Comentario
+            FROM Art_Ubi as au
+		        INNER JOIN Ubicacion as ubi on au.Ubicacion = ubi.Numero
+            WHERE Num_Referencia = ?
+            ORDER BY FechaEntrada DESC;
+            `,[id]);
+
+            res.json(history);
+          } catch (error) {
+            console.error(error);
+            res.status(500).json({error: 'Internal Server Error'});
+          }
+        })
           
     return router;
 };
