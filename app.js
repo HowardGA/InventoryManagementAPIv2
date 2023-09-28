@@ -15,6 +15,8 @@ const app = express();
 app.use(express.json());
 app.use(cors(corsOption));
 
+// Serve static files from the "images" folder
+app.use('/images', express.static(__dirname + '/images'));
 // Routes
 const Router = require('./Routes/endpoints');
 const router = Router(db);

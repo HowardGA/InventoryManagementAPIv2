@@ -1,5 +1,6 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
+const upload = require('./../multerConfig');
 
 const router = express.Router();
 
@@ -23,12 +24,24 @@ module.exports = (db) => {
             const id = req.params.id;
             const [row] = await db.query('SELECT * FROM Articulo WHERE Num_Referencia = ?', [id]);
             const UPC = row[0].Num_Referencia;
-            //take the location from the other table
+            //Get the name of the Images
+            const [images] = await db.query(
+              'SELECT NombreImagen FROM Imagenes WHERE Num_Referencia = ?',[id]
+            );
+            const imageNames = images.map((obj) => obj.NombreImagen);
+
             const [location] = await db.query(`
             SELECT ubi.Lugar
             FROM Articulo as art
             inner JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
             inner join Ubicacion as ubi on AU.Ubicacion = ubi.Numero
+            WHERE art.Num_Referencia = ? and AU.FechaSalida IS NULL`,[UPC]);
+            //Select Municipio from that item
+            const [municipio] = await db.query(`
+            SELECT mun.Nombre
+            FROM Articulo as art
+            inner JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
+            inner join Municipio as mun on AU.Municipio = mun.Numero
             WHERE art.Num_Referencia = ? and AU.FechaSalida IS NULL`,[UPC]);
             //get the name of the user who inserted the item
             const [user] = await db.query(`
@@ -52,10 +65,13 @@ module.exports = (db) => {
             const statusData = status[0];
             console.log("This is the status: "+statusData)
             const fullStatus = `${statusData.Estado}, ${statusData.Comentario}`;
+            console.log("Municipio"+municipio[0]);
 //add it to the main data
             row[0].locacion = location[0].Lugar; 
+            row[0].Municipio = municipio[0].Nombre;
             row[0].usuario = fullName;
             row[0].estado = fullStatus;
+            row[0].images = imageNames
 
             if(row.length === 0){
                 
@@ -194,9 +210,18 @@ module.exports = (db) => {
         });
 
         // ADD new item
-        router.post('/addItem', async (req, res) => {
+        router.post('/addItem', upload.array('images', 5), async (req, res) => {
             try{
-                const {codigo,nombre,modelo,color,descripcion,marca,ubicacion,email} = req.body;
+              const {codigo,serial,nombre,modelo
+                ,descripcion,marca,ubicacion,municipio,email} = req.body;
+                // Access uploaded images using req.files
+                const images = req.files;
+
+                // Save the image file names and paths to an array
+                const imagePaths = images.map((image) => ({
+                  path: image.path, // Path where the image is saved on the server
+                  fileName: image.filename, // Filename assigned by multer
+                }));
 
                 const currentTimeStamp = getCurrentDateTime();
                 
@@ -208,6 +233,10 @@ module.exports = (db) => {
                     'SELECT Numero FROM Ubicacion WHERE Lugar = ?',
                     [ubicacion]
                   );
+                  const [municipioResult] = await db.query(
+                    'SELECT Numero FROM Municipio WHERE Nombre = ?',
+                    [municipio]
+                  );
                   const [user] = await db.query(
                     'SELECT Numero FROM Usuario WHERE Correo = ?',
                     [email]
@@ -218,18 +247,26 @@ module.exports = (db) => {
                     const location = locationResult && locationResult[0] ? locationResult[0].Numero : null;
 
                 const [result] = await db.query(
-                    'INSERT INTO Articulo (Num_Referencia,Nombre,Modelo,Color,Descripcion,FechaCreacion,Marca) VALUES (?,?,?,?,?,?,?)',
-                    [codigo,nombre,modelo,color,descripcion,currentTimeStamp,brand]
+                    'INSERT INTO Articulo (Num_Referencia,NSerial,Nombre,Modelo,Descripcion,FechaCreacion,Marca) VALUES (?,?,?,?,?,?,?)',
+                    [codigo,serial,nombre,modelo,descripcion,currentTimeStamp,brand]
                   );
                     //once the item is created, insert the location
                 const [result2] = await db.query(
-                    'INSERT INTO Art_Ubi (Ubicacion,Num_Referencia,FechaEntrada,FechaSalida,Comentario) VALUES (?,?,?,NULL,"Artiuclo nuevo, recien añadido")',
-                        [location,codigo,currentTimeStamp]
+                    'INSERT INTO Art_Ubi (Ubicacion,Num_Referencia,FechaEntrada,FechaSalida,Comentario,Municipio) VALUES (?,?,?,NULL,"Artiuclo nuevo, recien añadido",?)',
+                        [location,codigo,currentTimeStamp,municipioResult[0].Numero]
                 );
                 const [result3] = await db.query(
                     'INSERT INTO Usr_Art (Usuario,Num_Referencia) VALUES (?,?)',
                         [user[0].Numero,codigo]
                 );
+
+                     // Loop through the images array and insert filenames into the table
+                     for (const image of images) {
+                      await db.query(
+                        'INSERT INTO Imagenes (Num_Referencia, NombreImagen) VALUES (?, ?)',
+                        [codigo, image.filename]
+                      );
+                    }
                   // Return a success message
                   return res.status(200).json({
                     status: 'SUCCESS',
@@ -338,7 +375,7 @@ module.exports = (db) => {
           router.post('/addReport', async (req, res) => {
             try {
               const currentTimeStamp = getCurrentDateTime();
-              const { UPC, ubicacion, comentario,accion,usuario} = req.body;
+              const { UPC, ubicacion, comentario,accion,usuario,municipio} = req.body;
           
               const [user] = await db.query(
                 'SELECT Numero FROM Usuario WHERE Correo = ?',
@@ -350,9 +387,14 @@ module.exports = (db) => {
                 [ubicacion]
               );
 
+              const [municipioNum] = await db.query(
+                'SELECT Numero FROM Municipio WHERE Nombre = ?',
+                [municipio]
+              );
+
               const report = await db.query(
-                `INSERT INTO Reporte (Accion,FechaCreacion,Estatus,Usuario,Articulo,Ubicacion,Comentario)
-                  VALUES (?,?,1,?,?,?,?)`,[accion,currentTimeStamp,user[0].Numero,UPC,locationNum[0].Numero,comentario]
+                `INSERT INTO Reporte (Accion,FechaCreacion,Estatus,Usuario,Articulo,Ubicacion,Municipio,Comentario)
+                  VALUES (?,?,1,?,?,?,?,?)`,[accion,currentTimeStamp,user[0].Numero,UPC,locationNum[0].Numero,municipioNum[0].Numero,comentario]
               )
           
               // Return a success message
@@ -366,7 +408,7 @@ module.exports = (db) => {
           router.get('/getReports', async (req,res) => {
             try {
               const [Reports] = await db.query(`
-              SELECT Numero, Accion, FechaCreacion, Usuario, Articulo, Ubicacion, Comentario FROM Reporte WHERE Estatus = 1;
+              SELECT Numero, Accion, FechaCreacion, Usuario, Articulo, Ubicacion,Municipio, Comentario FROM Reporte WHERE Estatus = 1;
               `,[]);
               res.json(Reports);
             } catch (error) {
@@ -380,7 +422,7 @@ module.exports = (db) => {
               const id = req.params.id;
 
               const [Report] = await db.query(`
-              SELECT Accion, FechaCreacion,FechaAprobacion, Estatus, Usuario, Articulo, Ubicacion, Comentario FROM Reporte WHERE Numero = ?
+              SELECT Accion, FechaCreacion,FechaAprobacion, Estatus, Usuario, Articulo, Ubicacion,Municipio,Comentario FROM Reporte WHERE Numero = ?
               `,[id]);
 
               const status = await db.query(`
@@ -396,6 +438,11 @@ module.exports = (db) => {
                 SELECT Lugar FROM Ubicacion WHERE Numero = ?
               `,[Report[0].Ubicacion]);
 
+              const municipioName = await db.query(
+                'SELECT Nombre FROM Municipio WHERE Numero = ?',
+                [Report[0].Municipio]
+              );
+
               const fullReport = {
                 "Accion": Report[0].Accion,
                 "FechaCreacion": Report[0].FechaCreacion,
@@ -404,6 +451,7 @@ module.exports = (db) => {
                 "Usuario": fullName,
                 "Articulo": Report[0].Articulo,
                 "Ubicacion": location[0][0].Lugar,
+                "Municipio": municipioName[0][0].Nombre,
                 "Comentario": Report[0].Comentario    
                         }
               res.json(fullReport);
