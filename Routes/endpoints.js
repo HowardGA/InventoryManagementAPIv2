@@ -94,11 +94,11 @@ module.exports = (db) => {
         }
     });
 
+    //check if the UPC exists or not
     router.get('/idCheck/:id', async (req,res) => {
         try{
             const id = req.params.id; 
             const [row] = await db.query('select Num_Referencia from Articulo where Num_Referencia = ?',[id]);
-            let check;
             if (typeof row[0].Num_Referencia === 'string'){
                 return res.status(200).json({
                     id:1
@@ -109,6 +109,22 @@ module.exports = (db) => {
             res.status(200).json({ id:0 });
         }
     });
+
+    //Check if the serial number exists or not
+    router.get('/serialCheck/:id', async (req,res) => {
+      try{
+          const id = req.params.id; 
+          const [row] = await db.query('select NSerial from Articulo where NSerial= ?',[id]);
+          if (typeof row[0].NSerial === 'string'){
+              return res.status(200).json({
+                  id:1
+              });
+          }
+      }catch (error) {
+          console.error(error);
+          res.status(200).json({ id:0 });
+      }
+  });
 
     router.get('/getAllArt', async (req, res) => {
         try {
@@ -121,11 +137,51 @@ module.exports = (db) => {
         }
     });
 
+    router.get('/getUsers', async (req,res) => {
+      try {
+        const [row] = await db.query(`
+        SELECT U.Nombre, U.ApePat, U.Correo, R.Rol
+        FROM Usuario AS U
+        INNER JOIN Rol AS R ON U.Rol = R.Numero`,[]);
+
+        res.json(row);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal Server Error' });
+    }
+    });
+
+    router.post('/setUser/:id', async (req,res) => {
+      try{
+          const email = req.params.id;
+          const {Rol} = req.body;
+          const [rolNum] = await db.query(
+            `SELECT Numero FROM Rol WHERE Rol = ?`,[Rol]
+          );
+          const changeRol = await db.query(
+            `UPDATE Usuario SET Rol = ? WHERE Correo = ?`,[rolNum[0].Numero,email]
+          );
+           // Return a success message
+           return res.status(200).json({
+            status: 'SUCCESS',
+            message: 'Rol Actualizado',
+           })
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal Server Error' });
+      }
+    });
+
     //get the pwd, then decrypt it and send it to the client like that
     router.post('/login', async (req, res) => {
         try {
             const { email, password } = req.body;
-            const [row] = await db.query('SELECT Nombre, ApePat, Correo, Passwd FROM Usuario WHERE Correo = ?', [email]);
+            const [row] = await db.query(`
+            SELECT U.Nombre, U.ApePat, U.Correo, U.Passwd,R.Numero
+            FROM Usuario as U
+            INNER JOIN Rol AS R ON U.Rol = R.Numero
+            WHERE Correo = ?
+            `, [email]);
     
             if (!row[0]) {
                 return res.status(401).json({
@@ -142,7 +198,8 @@ module.exports = (db) => {
                     const userData = {
                         name: row[0].Nombre,
                         lastName: row[0].ApePat,
-                        email: row[0].Correo
+                        email: row[0].Correo,
+                        role: row[0].Numero
                     };
     
                     return res.status(200).json({
