@@ -60,7 +60,12 @@ module.exports = (db) => {
             FROM Articulo as art
             INNER JOIN Art_Est as ae ON art.Num_Referencia = ae.Num_Referencia
             INNER JOIN Estatus_Articulo as ea on ae.Estatus = ea.Numero
-            WHERE art.Num_Referencia = ?`,[UPC]);
+            WHERE art.Num_Referencia = ?
+    AND ae.Fecha = (
+        SELECT MAX(Fecha)
+        FROM Art_Est
+        WHERE Num_Referencia = ?
+    );`,[UPC,UPC]);
             //make the user a whole string
             const statusData = status[0];
             console.log("This is the status: "+statusData)
@@ -270,7 +275,7 @@ module.exports = (db) => {
         router.post('/addItem', upload.array('images', 5), async (req, res) => {
             try{
               const {codigo,serial,nombre,modelo
-                ,descripcion,marca,ubicacion,municipio,email} = req.body;
+                ,descripcion,marca,ubicacion,municipio,email,resguardante} = req.body;
                 // Access uploaded images using req.files
                 const images = req.files;
 
@@ -304,8 +309,8 @@ module.exports = (db) => {
                     const location = locationResult && locationResult[0] ? locationResult[0].Numero : null;
 
                 const [result] = await db.query(
-                    'INSERT INTO Articulo (Num_Referencia,NSerial,Nombre,Modelo,Descripcion,FechaCreacion,Marca) VALUES (?,?,?,?,?,?,?)',
-                    [codigo,serial,nombre,modelo,descripcion,currentTimeStamp,brand]
+                    'INSERT INTO Articulo (Num_Referencia,NSerial,Nombre,Modelo,Descripcion,FechaCreacion,Marca,resguardante) VALUES (?,?,?,?,?,?,?,?)',
+                    [codigo,serial,nombre,modelo,descripcion,currentTimeStamp,brand,resguardante]
                   );
                     //once the item is created, insert the location
                 const [result2] = await db.query(
@@ -462,6 +467,7 @@ module.exports = (db) => {
             }
           });
 
+          //Get all reports pending
           router.get('/getReports', async (req,res) => {
             try {
               const [Reports] = await db.query(`
@@ -474,6 +480,7 @@ module.exports = (db) => {
             }
           });
 
+          //get a report with its ID
           router.get('/getReportById/:id', async (req, res) => {
             try {
               const id = req.params.id;
@@ -519,6 +526,7 @@ module.exports = (db) => {
             }
         });
 
+        //history of the location of a particular item
         router.get(('/locationHistory/:id'), async (req,res) => {
           try{
             const id = req.params.id;
@@ -536,7 +544,85 @@ module.exports = (db) => {
             console.error(error);
             res.status(500).json({error: 'Internal Server Error'});
           }
-        })
+        });
+
+        //Router to get the awaitng comfirm pending "bajas" from the items
+        router.get('/getPendingStatus', async (req,res) => {
+          try{
+
+            const [bajas] = await db.query(`
+            SELECT *
+            FROM Art_Est
+            WHERE Estatus = 3
+              AND Num_Referencia NOT IN (
+                SELECT Num_Referencia
+                FROM Art_Est
+                WHERE Estatus = 2
+              );
+            
+            `,[]);
+
+            res.json(bajas);
+          } catch (error) {
+            console.error(error);
+            res.status(500).json({error: 'Internal Server Error'});
+          }
+        });
+
+        router.get('/getMotiveDisable/:upc', async (req,res) => {
+          try{
+            const UPC = req.params.upc;
+            const [motivo] = await db.query(`
+            SELECT comentario
+            FROM Art_Est
+            WHERE Num_Referencia = ?
+            ORDER BY Fecha DESC
+            LIMIT 1;
+            `,[UPC]);
+
+            res.json(motivo[0]);
+          } catch (error) {
+            console.error(error);
+            res.status(500).json({error: 'Internal Server Error'});
+          }
+        });
+
+        router.post('/disableItem/:op', async (req,res) => {
+          try {
+            const currentTimeStamp = getCurrentDateTime();
+            const op = req.params.op;
+            console.log("this is the OP: ",op)
+            if(parseInt(op) === 1){//check if you making a report or your disabling for good an item
+              console.log("Here at the 1");
+            const {UPC,comentario,reporte} = req.body;
+        //add the new status to the item
+            await db.query(
+              'INSERT INTO Art_Est (Estatus, Num_Referencia, Comentario, Fecha) VALUES (3,?,?,?)',
+              [UPC,comentario,currentTimeStamp]
+            );
+              //change the status of the report so it can now be checked
+              await db.query(
+                'UPDATE Reporte SET FechaAprobacion = ?, Estatus = ? WHERE Numero = ?',
+                [currentTimeStamp,2,reporte]
+              );
+            } else if (parseInt(op) === 2){
+              console.log("Here at the 2nd");
+              const {UPC,comentario,comfirmedDate} = req.body;
+              const formattedTimestamp = new Date(comfirmedDate).toISOString().slice(0, 19).replace('T', ' ');
+              await db.query(
+                'INSERT INTO Art_Est (Estatus, Num_Referencia, Comentario, Fecha,FechaConfirmacion) VALUES (2,?,?,?,?)',
+                [UPC,comentario,currentTimeStamp,formattedTimestamp]
+              );
+            }
+        
+            // Return a success message
+            res.status(201).json({ message: 'Baja Realizada', status: 'SUCCESS' });
+          } catch (error) {
+            console.error(error);
+            res.status(500).json({ error: 'Internal Server Error' });
+          }
+        });
+
           
     return router;
 };
