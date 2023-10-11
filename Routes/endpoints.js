@@ -623,6 +623,110 @@ module.exports = (db) => {
           }
         });
 
+        //comfirm that that the item has a "baja" pendding, so they can add a date if comfirmation from Mexicali
+        router.get('/getBajasPendientes/:id', async (req,res) => {
+          try {
+            const id = req.params.id;
+            const [row] = await db.query(`SELECT *
+            FROM Articulo
+            WHERE Num_Referencia = ?
+            AND ? IN (
+                SELECT Num_Referencia
+                FROM Art_Est
+                WHERE Estatus = 3
+            )
+            AND ? NOT IN (
+                SELECT Num_Referencia
+                FROM Art_Est
+                WHERE Estatus = 2
+            );`, [id,id,id]);
+
+            if(row.length === 0){
+              return res.status(404).json({
+                status: 'FAIL',
+                message: 'Este artículo no tiene una baja pendiente',
+                data: null
+            });
+        }else{  
+                    return res.status(200).json({
+                        status: 'SUCCESS',
+                        message: 'Articulo Encontrado',
+                        data: row[0].Num_Referencia,
+                    });
+            }
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+        });
+
+        //makes the pdf depending on the option number thats being sent within the url
+        router.get('/pdfMaker/:op', async (req,res) => {
+          try {
+          const op = req.params.op;
+
+          // Create an object to store items organized by location
+          const objItemsOrg = {};
+      
+          // Get the "active" items (not baja)
+          if (parseInt(op) === 1) {
+            const [locations] = await db.query('select * from Ubicacion', []);
+      
+            for (const location of locations) {
+              const locationName = location.Lugar;
+      
+              const [items] = await db.query(`
+                SELECT DISTINCT art.Num_Referencia as UPC, art.NSerial as Serial, art.Nombre as Nombre, mar.Nombre as Marca, art.Modelo as Modelo, 
+                art.Descripcion as Descripcion, mun.Nombre as Municipio, art.Resguardante as Resguardante
+                FROM Articulo AS art
+                INNER JOIN Art_Est AS ae ON art.Num_Referencia = ae.Num_Referencia
+                INNER JOIN Estatus_Articulo AS ea ON ae.Estatus = ea.Numero
+                INNER JOIN Art_Ubi AS au ON art.Num_Referencia = au.Num_Referencia
+                INNER JOIN Ubicacion AS ubi ON au.Ubicacion = ubi.Numero
+                INNER JOIN Marca AS mar ON art.Marca = mar.Numero
+                INNER JOIN Municipio AS mun ON au.Municipio = mun.Numero
+                WHERE ubi.Lugar = ?
+                AND art.Num_Referencia NOT IN (
+                    SELECT Num_Referencia FROM Art_Est WHERE Estatus = 2 OR Estatus = 3
+                );
+              `, [locationName]);
+      
+              // Store the items in the object organized by location
+              objItemsOrg[locationName] = items;
+            }
+
+          } else {
+            const [locations] = await db.query('select * from Ubicacion', []);
+      
+            for (const location of locations) {
+              const locationName = location.Lugar;
+      
+              const [items] = await db.query(`
+                SELECT DISTINCT art.Num_Referencia as UPC, art.NSerial as Serial, art.Nombre as Nombre, mar.Nombre as Marca, art.Modelo as Modelo, 
+                art.Descripcion as Descripcion, mun.Nombre as Municipio, art.Resguardante as Resguardante, ae.FechaConfirmacion as Confirmacion
+                FROM Articulo AS art
+                INNER JOIN Art_Est AS ae ON art.Num_Referencia = ae.Num_Referencia
+                INNER JOIN Estatus_Articulo AS ea ON ae.Estatus = ea.Numero
+                INNER JOIN Art_Ubi AS au ON art.Num_Referencia = au.Num_Referencia
+                INNER JOIN Ubicacion AS ubi ON au.Ubicacion = ubi.Numero
+                INNER JOIN Marca AS mar ON art.Marca = mar.Numero
+                INNER JOIN Municipio AS mun ON au.Municipio = mun.Numero
+                WHERE ubi.Lugar = ?
+                AND art.Num_Referencia IN (
+                    SELECT Num_Referencia FROM Art_Est WHERE Estatus = 2 OR Estatus = 3
+                );
+              `, [locationName]);
+      
+              // Store the items in the object organized by location
+              objItemsOrg[locationName] = items;
+            }
+
+          }
+          res.json(objItemsOrg);
+        }catch (error) {
+          console.error(error);
+        }
+        })
           
     return router;
 };
