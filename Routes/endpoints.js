@@ -22,60 +22,34 @@ module.exports = (db) => {
     router.get('/getArtByID/:id', async (req, res) => {
         try {
             const id = req.params.id;
-            const [row] = await db.query('SELECT * FROM Articulo WHERE Num_Referencia = ?', [id]);
+            const [row] = await db.query(`
+            SELECT
+              art.Num_Referencia,art.NSerial,art.Nombre,art.Modelo,art.Descripcion,art.FechaCreacion,
+              art.Marca,art.Resguardante,ubi.Lugar as locacion,mun.Nombre as Municipio,
+              concat(usr.Nombre,' ',usr.ApePat) as usuario,concat(est_art.Estado,', ',ae.Comentario) as estado
+              FROM Articulo as art
+              inner JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
+              inner join Ubicacion as ubi on AU.Ubicacion = ubi.Numero
+              inner join Municipio as mun on AU.Municipio = mun.Numero
+              INNER JOIN Usr_Art as ua on art.Num_Referencia = ua.Num_Referencia
+              INNER JOIN Usuario as usr on ua.Usuario = usr.Numero
+              INNER JOIN Art_Est as ae ON art.Num_Referencia = ae.Num_Referencia
+              INNER JOIN Estatus_Articulo as ea on ae.Estatus = ea.Numero
+                          INNER JOIN Estatus_Articulo as est_art on ae.Estatus = est_art.Numero
+                          WHERE art.Num_Referencia = ?
+                  AND ae.Fecha = (
+                      SELECT MAX(Fecha)
+                      FROM Art_Est
+                      WHERE Num_Referencia = ?
+                  )and AU.FechaSalida IS NULL LIMIT 1;
+            `, [id,id]);
             const UPC = row[0].Num_Referencia;
             //Get the name of the Images
             const [images] = await db.query(
               'SELECT NombreImagen FROM Imagenes WHERE Num_Referencia = ?',[id]
             );
             const imageNames = images.map((obj) => obj.NombreImagen);
-
-            const [location] = await db.query(`
-            SELECT ubi.Lugar
-            FROM Articulo as art
-            inner JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
-            inner join Ubicacion as ubi on AU.Ubicacion = ubi.Numero
-            WHERE art.Num_Referencia = ? and AU.FechaSalida IS NULL`,[UPC]);
-            //Select Municipio from that item
-            const [municipio] = await db.query(`
-            SELECT mun.Nombre
-            FROM Articulo as art
-            inner JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
-            inner join Municipio as mun on AU.Municipio = mun.Numero
-            WHERE art.Num_Referencia = ? and AU.FechaSalida IS NULL`,[UPC]);
-            //get the name of the user who inserted the item
-            const [user] = await db.query(`
-            SELECT usr.Nombre,usr.ApePat,usr.Correo
-            FROM Articulo as art
-            INNER JOIN Usr_Art as ua on art.Num_Referencia = ua.Num_Referencia
-            INNER JOIN Usuario as usr on ua.Usuario = usr.Numero
-            WHERE art.Num_Referencia = ?`,[UPC]);
-            //make the user a whole string
-            const userData = user[0];
-            const fullName = `${userData.Nombre} ${userData.ApePat}`;
-
-            // Get the state of the item
-            const [status] = await db.query(`
-            SELECT ea.Estado,ae.Comentario
-            FROM Articulo as art
-            INNER JOIN Art_Est as ae ON art.Num_Referencia = ae.Num_Referencia
-            INNER JOIN Estatus_Articulo as ea on ae.Estatus = ea.Numero
-            WHERE art.Num_Referencia = ?
-    AND ae.Fecha = (
-        SELECT MAX(Fecha)
-        FROM Art_Est
-        WHERE Num_Referencia = ?
-    );`,[UPC,UPC]);
-            //make the user a whole string
-            const statusData = status[0];
-            console.log("This is the status: "+statusData)
-            const fullStatus = `${statusData.Estado}, ${statusData.Comentario}`;
-            console.log("Municipio"+municipio[0]);
-//add it to the main data
-            row[0].locacion = location[0].Lugar; 
-            row[0].Municipio = municipio[0].Nombre;
-            row[0].usuario = fullName;
-            row[0].estado = fullStatus;
+          
             row[0].images = imageNames
 
             if(row.length === 0){
@@ -130,17 +104,6 @@ module.exports = (db) => {
           res.status(200).json({ id:0 });
       }
   });
-
-    router.get('/getAllArt', async (req, res) => {
-        try {
-            const [row] = await db.query('SELECT * FROM Articulo');
-
-            res.json(row[0]);
-        } catch (error) {
-            console.error(error);
-            res.status(500).json({ error: 'Internal Server Error' });
-        }
-    });
 
     router.get('/getUsers', async (req,res) => {
       try {
@@ -480,45 +443,50 @@ module.exports = (db) => {
             }
           });
 
-          //get a report with its ID
+          //Get all reports solved
+          router.get('/getReportsHistory', async (req,res) => {
+            try {
+              const [Reports] = await db.query(`
+              SELECT Numero, Accion, FechaCreacion, Usuario, Articulo, Ubicacion,Municipio, Comentario FROM Reporte WHERE Estatus = 2;
+              `,[]);
+              res.json(Reports);
+            } catch (error) {
+              console.error(error);
+              res.status(500).json({ error: 'Internal Server Error' });
+            }
+          });
+
+           //Get all bajas issued
+           router.get('/getBajasHistory', async (req,res) => {
+            try {
+              const [Reports] = await db.query(`
+              select Num_Referencia from Art_Est where Estatus = 3;
+              `,[]);
+              res.json(Reports);
+            } catch (error) {
+              console.error(error);
+              res.status(500).json({ error: 'Internal Server Error' });
+            }
+          });
+
+          //get a report with its ID -Merged the Queries
           router.get('/getReportById/:id', async (req, res) => {
             try {
               const id = req.params.id;
 
               const [Report] = await db.query(`
-              SELECT Accion, FechaCreacion,FechaAprobacion, Estatus, Usuario, Articulo, Ubicacion,Municipio,Comentario FROM Reporte WHERE Numero = ?
+              SELECT rep.Accion , rep.FechaCreacion,rep.FechaAprobacion, er.Estado as EstatusRep,concat(usr.Nombre,' ',usr.ApePat) as Usuario, art.Num_Referencia as UPC,art.NSerial as Serial,art.Nombre as Articulo,mar.Nombre as Marca,art.Modelo as Modelo,art.Resguardante,ubi.Lugar as Ubicacion,mun.Nombre as Municipio,rep.Comentario as Motivo
+              from Articulo as art
+              inner join Reporte as rep on art.Num_Referencia = rep.Articulo
+              inner join Estatus_Reporte as er on rep.Estatus = er.Numero
+              inner join Usuario as usr on rep.Usuario = usr.Numero
+              inner join Ubicacion as ubi on rep.Ubicacion = ubi.Numero
+              inner join Municipio as mun on rep.Municipio = mun.Numero
+              inner join Marca as mar on art.Marca = mar.Numero
+              where rep.Numero = ?
               `,[id]);
 
-              const status = await db.query(`
-              SELECT Estado FROM Estatus_Reporte WHERE Numero = ?
-            `,[Report[0].Estatus]);
-
-              const User = await db.query(`
-              SELECT Nombre,ApePat FROM Usuario WHERE Numero = ?
-            `,[Report[0].Usuario]);
-            const fullName = `${User[0][0].Nombre} ${User[0][0].ApePat}`;
-
-              const location = await db.query(`
-                SELECT Lugar FROM Ubicacion WHERE Numero = ?
-              `,[Report[0].Ubicacion]);
-
-              const municipioName = await db.query(
-                'SELECT Nombre FROM Municipio WHERE Numero = ?',
-                [Report[0].Municipio]
-              );
-
-              const fullReport = {
-                "Accion": Report[0].Accion,
-                "FechaCreacion": Report[0].FechaCreacion,
-                "FechaAprobacion": Report[0].FechaAprobacion,
-                "Estatus": status[0][0].Estado,
-                "Usuario": fullName,
-                "Articulo": Report[0].Articulo,
-                "Ubicacion": location[0][0].Lugar,
-                "Municipio": municipioName[0][0].Nombre,
-                "Comentario": Report[0].Comentario    
-                        }
-              res.json(fullReport);
+              res.json(Report);
     
             } catch (error) {
                 console.error(error);
@@ -585,8 +553,8 @@ module.exports = (db) => {
             console.error(error);
             res.status(500).json({error: 'Internal Server Error'});
           }
-        });
-
+        })
+        //turn the "estado" of the item into a "baja" or a "baja pendiente"
         router.post('/disableItem/:op', async (req,res) => {
           try {
             const currentTimeStamp = getCurrentDateTime();
