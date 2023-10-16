@@ -152,9 +152,9 @@ module.exports = (db) => {
             `, [email]);
     
             if (!row[0]) {
-                return res.status(401).json({
+                return res.status(201).json({
                     status: 'FAIL',
-                    message: 'Invalid email or password',
+                    message: 'Correo o Contraseña Erroneas',
                     data: null
                 });
             }
@@ -176,9 +176,9 @@ module.exports = (db) => {
                         data: userData
                     });
                 } else {
-                    return res.status(401).json({
+                    return res.status(201).json({
                         status: 'FAIL',
-                        message: 'Invalid email or password',
+                        message: 'Correo o Contraseña Erroneas',
                         data: null,
                     });
                 }
@@ -694,7 +694,22 @@ module.exports = (db) => {
         }catch (error) {
           console.error(error);
         }
-        })
+        });
+
+        router.get('/countItems', async (req,res) => {
+          try{
+          const [count] = await db.query(`
+          SELECT (SELECT count(Num_Referencia) FROM Art_Est WHERE Estatus = 1 AND Num_Referencia NOT IN 
+          (SELECT Num_Referencia FROM Art_Est WHERE Estatus IN (2, 3))) AS Activos, 
+          (SELECT count(Num_Referencia) FROM Art_Est WHERE Estatus = 3 AND Num_Referencia NOT IN 
+          (SELECT Num_Referencia FROM Art_Est WHERE Estatus = 2)) AS Pendientes, 
+          (SELECT count(Num_Referencia) FROM Art_Est WHERE Estatus = 2) AS Baja;
+          `,[]);
+          res.json(count[0]);
+          }catch (error){
+            console.error(error);
+          }
+        } );
           
     return router;
 };
