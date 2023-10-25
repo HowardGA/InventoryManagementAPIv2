@@ -28,9 +28,9 @@ module.exports = (db) => {
               art.Marca,art.Resguardante,ubi.Lugar as locacion,mun.Nombre as Municipio,
               concat(usr.Nombre,' ',usr.ApePat) as usuario,concat(est_art.Estado,', ',ae.Comentario) as estado
               FROM Articulo as art
-              inner JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
-              inner join Ubicacion as ubi on AU.Ubicacion = ubi.Numero
-              inner join Municipio as mun on AU.Municipio = mun.Numero
+              INNER JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
+              INNER JOIN Ubicacion as ubi on AU.Ubicacion = ubi.Numero
+              INNER JOIN Municipio as mun on AU.Municipio = mun.Numero
               INNER JOIN Usr_Art as ua on art.Num_Referencia = ua.Num_Referencia
               INNER JOIN Usuario as usr on ua.Usuario = usr.Numero
               INNER JOIN Art_Est as ae ON art.Num_Referencia = ae.Num_Referencia
@@ -43,14 +43,21 @@ module.exports = (db) => {
                       WHERE Num_Referencia = ?
                   )and AU.FechaSalida IS NULL LIMIT 1;
             `, [id,id]);
-            const UPC = row[0].Num_Referencia;
+            console.log("this is the sht: ",row[0]);
             //Get the name of the Images
             const [images] = await db.query(
               'SELECT NombreImagen FROM Imagenes WHERE Num_Referencia = ?',[id]
             );
             const imageNames = images.map((obj) => obj.NombreImagen);
           
-            row[0].images = imageNames
+            // Check if there are images associated with the reference
+            if (imageNames.length > 0) {
+              // Set the 'images' property if there are images
+              row[0].images = imageNames;
+            } else {
+              // Handle the case where there are no images
+              row[0].images = [];
+            }
 
             if(row.length === 0){
                 
@@ -355,7 +362,7 @@ module.exports = (db) => {
         router.put('/updItem', async (req, res) => {
             try {
               const currentTimeStamp = getCurrentDateTime();
-              const { UPC, ubicacion, comentario,reporte } = req.body;
+              const { UPC, ubicacion, comentario,reporte, municipio } = req.body;
           
           
               const [locationNum] = await db.query(
@@ -369,7 +376,6 @@ module.exports = (db) => {
                 [UPC]
               );
           
-
               // If an existing row is found, update FechaSalida
               if (existingRow.length > 0) {
                 await db.query(
@@ -377,18 +383,26 @@ module.exports = (db) => {
                   [currentTimeStamp, UPC]
                 );
               } 
+              //get the number of the Municipio
+              const [municipioNum] = await db.query(
+                'select numero from Municipio where Nombre = ?',
+                [municipio]
+              );
+              console.log("A ver ",municipio," ",municipioNum);
+
                 // Insert a new row
                 await db.query(
-                  'INSERT INTO Art_Ubi (Ubicacion, Num_Referencia, FechaEntrada, Comentario) VALUES (?, ?, ?, ?)',
-                  [locationNum[0].Numero, UPC, currentTimeStamp, comentario]
+                  'INSERT INTO Art_Ubi (Ubicacion, Num_Referencia, FechaEntrada, Comentario, Municipio) VALUES (?, ?, ?, ?, ?)',
+                  [locationNum[0].Numero, UPC, currentTimeStamp, comentario,municipioNum[0].numero]
                 );
-
+                if(reporte){// if reporte is not defined is because an admin is tryong to disable an item, so no report required
                 await db.query(
                   'UPDATE Reporte SET FechaAprobacion = ?, Estatus = ? WHERE Numero = ?',
                   [currentTimeStamp,2,reporte]
                 );
-          
+                }
               // Return a success message
+    
               res.status(201).json({ message: 'Campos Actualizados', status: 'SUCCESS' });
             } catch (error) {
               console.error(error);
@@ -569,10 +583,12 @@ module.exports = (db) => {
               [UPC,comentario,currentTimeStamp]
             );
               //change the status of the report so it can now be checked
+              if(reporte){// if reporte is not defined is because an admin is tryong to disable an item, so no report required
               await db.query(
                 'UPDATE Reporte SET FechaAprobacion = ?, Estatus = ? WHERE Numero = ?',
                 [currentTimeStamp,2,reporte]
               );
+              }
             } else if (parseInt(op) === 2){
               console.log("Here at the 2nd");
               const {UPC,comentario,comfirmedDate} = req.body;
