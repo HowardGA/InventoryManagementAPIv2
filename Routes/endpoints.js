@@ -117,7 +117,8 @@ module.exports = (db) => {
         const [row] = await db.query(`
         SELECT U.Nombre, U.ApePat, U.Correo, R.Rol
         FROM Usuario AS U
-        INNER JOIN Rol AS R ON U.Rol = R.Numero`,[]);
+        INNER JOIN Rol AS R ON U.Rol = R.Numero
+        WHERE Estado = 1`,[]);
 
         res.json(row);
     } catch (error) {
@@ -126,6 +127,7 @@ module.exports = (db) => {
     }
     });
 
+    //changes the rol of an user
     router.post('/setUser/:id', async (req,res) => {
       try{
           const email = req.params.id;
@@ -147,8 +149,22 @@ module.exports = (db) => {
       }
     });
 
+    //disables an user
+    router.put('/disableUser/:id', async (req,res) => {
+      try{
+          const email = req.params.id;
+          await db.query(
+            `update Usuario set Estado = 2 where Correo = ?`,[email]
+          );
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal Server Error' });
+      }
+    });
+
     //get the pwd, then decrypt it and send it to the client like that
     router.post('/login', async (req, res) => {
+      console.log("Sum here");
         try {
             const { email, password } = req.body;
             const [row] = await db.query(`
@@ -208,7 +224,7 @@ module.exports = (db) => {
           const hashedPassword = await bcrypt.hash(password, 10);
           // Save to the DB
           const [result] = await db.query(
-            'INSERT INTO Usuario (Nombre, ApePat, Correo, Passwd,Rol) VALUES (?, ?, ?, ?, 2)',
+            'INSERT INTO Usuario (Nombre, ApePat, Correo, Passwd,Rol,Estado) VALUES (?, ?, ?, ?, 2,1)',
             [name, lastname, email, hashedPassword]
           );
           // Return a success message
