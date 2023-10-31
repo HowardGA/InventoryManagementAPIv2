@@ -168,9 +168,10 @@ module.exports = (db) => {
         try {
             const { email, password } = req.body;
             const [row] = await db.query(`
-            SELECT U.Nombre, U.ApePat, U.Correo, U.Passwd,R.Numero
+            SELECT U.Nombre, U.ApePat, U.Correo, U.Passwd,R.Numero,EU.Numero as Estado
             FROM Usuario as U
             INNER JOIN Rol AS R ON U.Rol = R.Numero
+            INNER JOIN Estatus_Usario as EU on U.Estado = EU.Numero
             WHERE Correo = ?
             `, [email]);
     
@@ -181,6 +182,14 @@ module.exports = (db) => {
                     data: null
                 });
             }
+
+            if (row[0].Estado == 2) {
+              return res.status(201).json({
+                  status: 'FAIL',
+                  message: 'Usuario dado de baja',
+                  data: null
+              });
+          }
     
             const storedHashedPassword = row[0].Passwd;
     
@@ -516,6 +525,20 @@ module.exports = (db) => {
               where rep.Numero = ?
               `,[id]);
 
+                 //Get the name of the Images
+            const [images] = await db.query(
+              'SELECT NombreImagen FROM Imagenes WHERE Num_Referencia = ?',[Report[0].UPC]
+            );
+            const imageNames = images.map((obj) => obj.NombreImagen);
+          
+            // Check if there are images associated with the reference
+            if (imageNames.length > 0) {
+              // Set the 'images' property if there are images
+              Report[0].images = imageNames;
+            } else {
+              // Handle the case where there are no images
+              Report[0].images = [];
+            }
               res.json(Report);
     
             } catch (error) {

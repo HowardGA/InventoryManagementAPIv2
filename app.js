@@ -1,19 +1,22 @@
 const express = require('express');
 const cors = require('cors');
+const morgan = require('morgan'); // Import the Morgan middleware
 const db = require('./database/connection');
 
 // Port
 const port = 8080;
 
 const corsOption = {
-    origin: '*',
+    origin: 'http://192.168.1.110',
     methods: ['POST', 'GET', 'PUT'],
-    credentials: true,
 };
 
 const app = express();
 app.use(express.json());
 app.use(cors(corsOption));
+
+// Add Morgan middleware for logging
+app.use(morgan('combined')); // You can choose a different log format ('combined' is common)
 
 // Serve static files from the "images" folder
 app.use('/images', express.static(__dirname + '/images'));
