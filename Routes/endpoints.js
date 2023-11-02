@@ -1,10 +1,12 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const upload = require('./../multerConfig');
+const axios = require('axios');
 
 const router = express.Router();
 
 module.exports = (db) => {
+  
     // Define your routes here and use the `db` connection for database operations
     const getCurrentDateTime = () => {
         const now = new Date();
@@ -18,7 +20,7 @@ module.exports = (db) => {
         const formattedDateTime = `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
         return formattedDateTime;
       };
-    
+
     router.get('/getArtByID/:id', async (req, res) => {
         try {
             const id = req.params.id;
@@ -154,7 +156,7 @@ module.exports = (db) => {
       try{
           const email = req.params.id;
           await db.query(
-            `update Usuario set Estado = 2 where Correo = ?`,[email]
+            `update Usuario set Estado = 2, Rol = 3 where Correo = ?`,[email]
           );
       } catch (error) {
         console.error(error);
@@ -440,6 +442,9 @@ module.exports = (db) => {
             try {
               const currentTimeStamp = getCurrentDateTime();
               const { UPC, ubicacion, comentario,accion,usuario,municipio} = req.body;
+
+              const [users] = await db.query('select correo from Usuario where Rol = 1',[]);
+              const correoArray = users.map(item => item.correo);
           
               const [user] = await db.query(
                 'SELECT Numero FROM Usuario WHERE Correo = ?',
@@ -460,6 +465,14 @@ module.exports = (db) => {
                 `INSERT INTO Reporte (Accion,FechaCreacion,Estatus,Usuario,Articulo,Ubicacion,Municipio,Comentario)
                   VALUES (?,?,1,?,?,?,?,?)`,[accion,currentTimeStamp,user[0].Numero,UPC,locationNum[0].Numero,municipioNum[0].Numero,comentario]
               )
+        console.log("LOOK AT THE ARRAY: ",correoArray);
+              axios.post(`https://app.nativenotify.com/api/indie/group/notification`, {
+                subIDs: correoArray,
+                appId: 14286,
+                appToken: 'vwfM8RtSKj5FbdvH2yaKfP',
+                title: 'Nuevo Reporte',
+                message: 'Un usuario ha realizado un nuevo reporte, ya puedes revisarlo en el apartado de reportes'
+           });
           
               // Return a success message
               res.status(201).json({ message: 'Reporte Realizado', status: 'SUCCESS' });
@@ -516,13 +529,13 @@ module.exports = (db) => {
               const [Report] = await db.query(`
               SELECT rep.Accion , rep.FechaCreacion,rep.FechaAprobacion, er.Estado as EstatusRep,concat(usr.Nombre,' ',usr.ApePat) as Usuario, art.Num_Referencia as UPC,art.NSerial as Serial,art.Nombre as Articulo,mar.Nombre as Marca,art.Modelo as Modelo,art.Resguardante,ubi.Lugar as Ubicacion,mun.Nombre as Municipio,rep.Comentario as Motivo
               from Articulo as art
-              inner join Reporte as rep on art.Num_Referencia = rep.Articulo
-              inner join Estatus_Reporte as er on rep.Estatus = er.Numero
-              inner join Usuario as usr on rep.Usuario = usr.Numero
-              inner join Ubicacion as ubi on rep.Ubicacion = ubi.Numero
-              inner join Municipio as mun on rep.Municipio = mun.Numero
-              inner join Marca as mar on art.Marca = mar.Numero
-              where rep.Numero = ?
+                inner join Reporte as rep on art.Num_Referencia = rep.Articulo
+                inner join Estatus_Reporte as er on rep.Estatus = er.Numero
+                inner join Usuario as usr on rep.Usuario = usr.Numero
+                inner join Ubicacion as ubi on rep.Ubicacion = ubi.Numero
+                inner join Municipio as mun on rep.Municipio = mun.Numero
+                inner join Marca as mar on art.Marca = mar.Numero
+                where rep.Numero = ?
               `,[id]);
 
                  //Get the name of the Images
@@ -765,6 +778,22 @@ module.exports = (db) => {
             console.error(error);
           }
         } );
+
+        router.post('/removeReport', async (req,res) => {
+          try{
+          const currentTimeStamp = getCurrentDateTime();
+          const {reporte} = req.body;
+          await db.query(
+            'UPDATE Reporte SET FechaAprobacion = ?, Estatus = ? WHERE Numero = ?',
+            [currentTimeStamp,2,reporte]
+          );
+          res.status(201).json({ message: 'Petición Rechazada', status: 'SUCCESS' });
+          }catch(error){
+            console.error(error);
+            res.status(401).json({ message: 'Ocurrio un Error', status: 'FAIL' });
+          }
+        })
           
-    return router;
+  
+        return router;
 };
