@@ -499,7 +499,7 @@ module.exports = (db) => {
           router.get('/getReportsHistory', async (req,res) => {
             try {
               const [Reports] = await db.query(`
-              SELECT Numero, Accion, FechaCreacion, Usuario, Articulo, Ubicacion,Municipio, Comentario FROM Reporte WHERE Estatus = 2;
+              SELECT Numero, Accion, FechaCreacion, Usuario, Articulo, Ubicacion,Municipio, Comentario FROM Reporte WHERE Estatus = 2 ORDER BY FechaCreacion DESC;
               `,[]);
               res.json(Reports);
             } catch (error) {
@@ -566,9 +566,10 @@ module.exports = (db) => {
             const id = req.params.id;
 
             const [history] = await db.query(`
-            SELECT ubi.Lugar, au.FechaEntrada, au.FechaSalida, au.Comentario
+            SELECT ubi.Lugar, au.FechaEntrada, au.FechaSalida, au.Comentario,mun.Nombre as Municipio
             FROM Art_Ubi as au
 		        INNER JOIN Ubicacion as ubi on au.Ubicacion = ubi.Numero
+            INNER JOIN Municipio as mun on au.Municipio = mun.Numero
             WHERE Num_Referencia = ?
             ORDER BY FechaEntrada DESC;
             `,[id]);
@@ -740,18 +741,18 @@ module.exports = (db) => {
               const [items] = await db.query(`
                 SELECT DISTINCT art.Num_Referencia as UPC, art.NSerial as Serial, art.Nombre as Nombre, mar.Nombre as Marca, art.Modelo as Modelo, 
                 art.Descripcion as Descripcion, mun.Nombre as Municipio, art.Resguardante as Resguardante, ae.FechaConfirmacion as Confirmacion
-                FROM Articulo AS art
-                INNER JOIN Art_Est AS ae ON art.Num_Referencia = ae.Num_Referencia
-                INNER JOIN Estatus_Articulo AS ea ON ae.Estatus = ea.Numero
-                INNER JOIN Art_Ubi AS au ON art.Num_Referencia = au.Num_Referencia
-                INNER JOIN Ubicacion AS ubi ON au.Ubicacion = ubi.Numero
-                INNER JOIN Marca AS mar ON art.Marca = mar.Numero
-                INNER JOIN Municipio AS mun ON au.Municipio = mun.Numero
-                WHERE ubi.Lugar = ?
-                AND art.Num_Referencia IN (
-                    SELECT Num_Referencia FROM Art_Est WHERE Estatus = 2 OR Estatus = 3
-                );
-              `, [locationName]);
+                  FROM Articulo AS art
+                  INNER JOIN Art_Est AS ae ON art.Num_Referencia = ae.Num_Referencia
+                  INNER JOIN Estatus_Articulo AS ea ON ae.Estatus = ea.Numero
+                  INNER JOIN Art_Ubi AS au ON art.Num_Referencia = au.Num_Referencia
+                  INNER JOIN Ubicacion AS ubi ON au.Ubicacion = ubi.Numero
+                  INNER JOIN Marca AS mar ON art.Marca = mar.Numero
+                  INNER JOIN Municipio AS mun ON au.Municipio = mun.Numero
+                  WHERE ubi.Lugar = ?
+                  AND art.Num_Referencia IN (
+                      SELECT Num_Referencia FROM Art_Est WHERE Estatus = 2 OR Estatus = 3
+                  );
+                `, [locationName]);
       
               // Store the items in the object organized by location
               objItemsOrg[locationName] = items;
