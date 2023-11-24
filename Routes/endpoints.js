@@ -21,6 +21,38 @@ module.exports = (db) => {
         return formattedDateTime;
       };
 
+      router.get('/getAllArtInfo', async (req, res) => {
+      try {
+        const [result] = await db.query(`
+          SELECT
+            art.Num_Referencia,
+            art.Nombre,
+            ubi.Lugar as Ubicacion,
+            art.Resguardante
+          FROM Articulo as art
+          INNER JOIN Art_Ubi as AU on art.Num_Referencia = AU.Num_Referencia
+          INNER JOIN Ubicacion as ubi on AU.Ubicacion = ubi.Numero;
+        `);
+    
+        if (result.length === 0) {
+          return res.status(404).json({
+            status: 'FAIL',
+            message: 'No se encontraron artículos',
+            data: null
+          });
+        } else {
+          return res.status(200).json({
+            status: 'SUCCESS',
+            message: 'Información de todos los Articulos',
+            data: result,
+          });
+        }
+      } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: 'Internal Server Error' });
+      }
+    });
+
     router.get('/getArtByID/:id', async (req, res) => {
         try {
             const id = req.params.id;
