@@ -300,6 +300,17 @@ module.exports = (db) => {
             }
         });
 
+ 	//all Municipios EVA AGUIRRE
+        router.get('/municipios', async (req, res) => {
+          try {
+              const [rows] = await db.query('SELECT (Nombre) FROM Municipio');
+              res.json(rows);
+          } catch (error) {
+              console.error(error);
+              res.status(500).json({ error: 'Internal Server Error' });
+          }
+      });
+
         // ADD new item
         router.post('/addItem', upload.array('images', 5), async (req, res) => {
             try{
