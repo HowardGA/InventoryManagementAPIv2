@@ -1,5 +1,5 @@
 const express = require('express');
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const upload = require('./../multerConfig');
 const axios = require('axios');
 
@@ -432,7 +432,7 @@ module.exports = (db) => {
         router.put('/updItem', async (req, res) => {
             try {
               const currentTimeStamp = getCurrentDateTime();
-              const { UPC, ubicacion, comentario,reporte, municipio } = req.body;
+              const { UPC, ubicacion, comentario,reporte, municipio,resguardante } = req.body;
           
           
               const [locationNum] = await db.query(
@@ -465,6 +465,13 @@ module.exports = (db) => {
                   'INSERT INTO Art_Ubi (Ubicacion, Num_Referencia, FechaEntrada, Comentario, Municipio) VALUES (?, ?, ?, ?, ?)',
                   [locationNum[0].Numero, UPC, currentTimeStamp, comentario,municipioNum[0].numero]
                 );
+
+                //New Code to update the "Resguardante"
+                await db.query(
+                  'UPDATE Articulo SET Resguardante = ? WHERE Num_Referencia = ?',
+                  [resguardante, UPC]
+                );
+                
                 if(reporte){// if reporte is not defined is because an admin is tryong to disable an item, so no report required
                 await db.query(
                   'UPDATE Reporte SET FechaAprobacion = ?, Estatus = ? WHERE Numero = ?',
@@ -836,7 +843,20 @@ module.exports = (db) => {
             console.error(error);
             res.status(401).json({ message: 'Ocurrio un Error', status: 'FAIL' });
           }
-        })
+        });
+
+        router.get('/getResguardantes/:id', async (req,res) => {
+          try {
+            const UPC = req.params.id; 
+            const [row] = await db.query(`
+            select Numero,Resguardante,FechaRegistro from Resguardantes where Num_Referencia = ? order by FechaRegistro desc;`,[UPC]);
+    
+            res.json(row);
+        } catch (error) {
+            console.error(error);
+            res.status(500).json({ error: 'Internal Server Error' });
+        }
+        });
           
   
         return router;

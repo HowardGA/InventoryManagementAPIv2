@@ -1,0 +1,8 @@
+DELIMITER $$
+CREATE TRIGGER `setStatus` AFTER INSERT ON `Articulo` FOR EACH ROW 
+BEGIN
+    INSERT INTO Art_Est (Estatus, Num_Referencia, Comentario, Fecha, Resguardante)
+    VALUES (1, NEW.Num_Referencia, 'Articulo recién añadido', NOW(), NEW.Resguardante);
+END;
+$$
+DELIMITER ;
